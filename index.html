@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chess Game</title>
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <style>
+      :root {
+        --light-square: #f0d9b5;
+        --dark-square: #b58863;
+        --highlight: rgba(255, 255, 0, 0.4);
+        --possible-move: rgba(20, 85, 30, 0.5);
+        --selected: rgba(20, 85, 255, 0.5);
+        --border-color: #444;
+        --text-dark: #333;
+        --text-light: #f5f5f5;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+        background-color: #f5f5f5;
+        color: var(--text-dark);
+      }
+
+      h1 {
+        color: #2c3e50;
+        margin-bottom: 10px;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+      }
+
+      #gameInfo {
+        background-color: white;
+        padding: 15px 25px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+        text-align: center;
+        width: 80%;
+        max-width: 600px;
+      }
+
+      #status {
+        font-size: 1.1em;
+        font-weight: 500;
+        margin: 10px 0;
+      }
+
+      #turnInfo {
+        font-size: 1em;
+        font-weight: bold;
+        padding: 8px 12px;
+        border-radius: 20px;
+        display: inline-block;
+        margin: 5px 0;
+      }
+
+      #turnInfo.white-turn {
+        background-color: #e8f4f8;
+        color: #2c3e50;
+        border: 1px solid #3498db;
+      }
+
+      #turnInfo.black-turn {
+        background-color: #2c3e50;
+        color: white;
+        border: 1px solid #1a252f;
+      }
+
+      #chessContainer {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 20px 0;
+      }
+
+      #chessBoard {
+        display: grid;
+        grid-template-columns: repeat(8, 60px);
+        grid-template-rows: repeat(8, 60px);
+        border: 15px solid #8b4513;
+        border-radius: 3px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        position: relative;
+        background: #8b4513;
+      }
+
+      .square {
+        width: 60px;
+        height: 60px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 45px;
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+      }
+
+      .light {
+        background-color: var(--light-square);
+      }
+
+      .dark {
+        background-color: var(--dark-square);
+      }
+
+      .square:hover {
+        filter: brightness(1.1);
+      }
+
+      .selected {
+        background-color: var(--selected) !important;
+      }
+
+      .possible-move {
+        position: relative;
+      }
+
+      .possible-move::after {
+        content: "";
+        position: absolute;
+        width: 24px;
+        height: 24px;
+        background-color: var(--possible-move);
+        border-radius: 50%;
+      }
+
+      .possible-capture {
+        position: relative;
+      }
+
+      .possible-capture::before {
+        content: "";
+        position: absolute;
+        width: 54px;
+        height: 54px;
+        border: 3px solid var(--possible-move);
+        border-radius: 50%;
+        box-sizing: border-box;
+      }
+
+      .coordinates {
+        position: absolute;
+        font-size: 12px;
+        font-weight: bold;
+        pointer-events: none;
+      }
+
+      .coordinate-light {
+        color: var(--light-square);
+      }
+
+      .coordinate-dark {
+        color: var(--dark-square);
+      }
+
+      .rank {
+        left: 2px;
+        top: 2px;
+      }
+
+      .file {
+        right: 2px;
+        bottom: 2px;
+      }
+
+      #moveHistory {
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        padding: 15px;
+        width: 80%;
+        max-width: 600px;
+        margin-top: 20px;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+
+      #moveHistory h3 {
+        margin-top: 0;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+        color: #2c3e50;
+      }
+
+      .move-entry {
+        padding: 8px 0;
+        border-bottom: 1px solid #f0f0f0;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .move-entry:nth-child(odd) {
+        background-color: #f9f9f9;
+      }
+
+      .move-number {
+        color: #7f8c8d;
+        margin-right: 10px;
+      }
+
+      #readyButton {
+        padding: 10px 25px;
+        font-size: 1em;
+        background-color: #27ae60;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        margin: 10px 0;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      #readyButton:hover {
+        background-color: #2ecc71;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+      }
+
+      #readyButton:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      #gameOver {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.9);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        color: white;
+        font-size: 2em;
+        z-index: 1000;
+        display: none;
+      }
+
+      #gameOver h2 {
+        margin-bottom: 20px;
+        text-align: center;
+        color: #f1c40f;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+      }
+
+      #gameOver button {
+        padding: 12px 30px;
+        font-size: 1em;
+        margin-top: 20px;
+        background-color: #e74c3c;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      #gameOver button:hover {
+        background-color: #c0392b;
+        transform: scale(1.05);
+      }
+
+      @media (max-width: 600px) {
+        #chessBoard {
+          grid-template-columns: repeat(8, 40px);
+          grid-template-rows: repeat(8, 40px);
+          border-width: 10px;
+        }
+
+        .square {
+          width: 40px;
+          height: 40px;
+          font-size: 30px;
+        }
+
+        .possible-capture::before {
+          width: 34px;
+          height: 34px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Rest of your HTML remains the same -->
+    <h1>Chess Game</h1>
+
+    <div id="gameInfo">
+      <p id="status">Click "Ready to Play" to find an opponent</p>
+      <button id="readyButton">Ready to Play</button>
+      <p id="turnInfo"></p>
+    </div>
+
+    <div id="chessContainer">
+      <div id="chessBoard"></div>
+    </div>
+
+    <div id="moveHistory">
+      <h3>Move History</h3>
+      <div id="historyEntries"></div>
+    </div>
+
+    <div id="gameOver">
+      <h2 id="gameOverText"></h2>
+      <button onclick="location.reload()">Play Again</button>
+    </div>
+
+    <script>
+      // Your JavaScript remains the same
+      const socket = io("http://localhost:3000");
+      let board = Array(8)
+        .fill()
+        .map(() => Array(8).fill(""));
+      let playerColor = null;
+      let gameId = null;
+      let selectedSquare = null;
+      let possibleMoves = [];
+      let currentTurn = null;
+
+      // Initialize the chess board
+      function initBoard() {
+        const chessBoard = document.getElementById("chessBoard");
+        chessBoard.innerHTML = "";
+
+        for (let x = 0; x < 8; x++) {
+          for (let y = 0; y < 8; y++) {
+            const square = document.createElement("div");
+            square.className = `square ${(x + y) % 2 === 0 ? "light" : "dark"}`;
+            square.id = `square-${x}-${y}`;
+            square.dataset.x = x;
+            square.dataset.y = y;
+
+            // Add coordinates
+            if (y === 0) {
+              const rank = document.createElement("span");
+              rank.className = `coordinates rank ${
+                x % 2 === y % 2 ? "coordinate-dark" : "coordinate-light"
+              }`;
+              rank.textContent = 8 - x;
+              square.appendChild(rank);
+            }
+
+            if (x === 7) {
+              const file = document.createElement("span");
+              file.className = `coordinates file ${
+                x % 2 === y % 2 ? "coordinate-dark" : "coordinate-light"
+              }`;
+              file.textContent = String.fromCharCode(97 + y);
+              square.appendChild(file);
+            }
+
+            // Display the piece
+            const piece = board[x][y];
+            if (piece) {
+              square.textContent = getPieceSymbol(piece);
+            }
+
+            square.addEventListener("click", () => handleSquareClick(x, y));
+            chessBoard.appendChild(square);
+          }
+        }
+      }
+
+      // Get Unicode symbol for a piece
+      function getPieceSymbol(piece) {
+        const symbols = {
+          r: "♜",
+          n: "♞",
+          b: "♝",
+          q: "♛",
+          k: "♚",
+          p: "♟",
+          R: "♖",
+          N: "♘",
+          B: "♗",
+          Q: "♕",
+          K: "♔",
+          P: "♙",
+        };
+        return symbols[piece] || "";
+      }
+
+      // Handle square click
+      function handleSquareClick(x, y) {
+        // If game is over, ignore clicks
+        if (document.getElementById("gameOver").style.display === "flex")
+          return;
+
+        // If not player's turn, ignore clicks
+        if (
+          (playerColor === "white" && currentTurn !== "white") ||
+          (playerColor === "black" && currentTurn !== "black")
+        ) {
+          return;
+        }
+
+        const piece = board[x][y];
+
+        // If no square is selected and the clicked square has a player's piece, select it
+        if (
+          !selectedSquare &&
+          piece &&
+          ((playerColor === "white" && piece === piece.toUpperCase()) ||
+            (playerColor === "black" && piece === piece.toLowerCase()))
+        ) {
+          selectedSquare = [x, y];
+          document.getElementById(`square-${x}-${y}`).classList.add("selected");
+
+          // Highlight possible moves (simplified for this example)
+          highlightPossibleMoves(x, y);
+          return;
+        }
+
+        // If a square is already selected
+        if (selectedSquare) {
+          const [fromX, fromY] = selectedSquare;
+
+          // If clicking on the same square, deselect it
+          if (fromX === x && fromY === y) {
+            clearSelection();
+            return;
+          }
+
+          // If clicking on another of player's pieces, select that one instead
+          if (
+            piece &&
+            ((playerColor === "white" && piece === piece.toUpperCase()) ||
+              (playerColor === "black" && piece === piece.toLowerCase()))
+          ) {
+            clearSelection();
+            selectedSquare = [x, y];
+            document
+              .getElementById(`square-${x}-${y}`)
+              .classList.add("selected");
+            highlightPossibleMoves(x, y);
+            return;
+          }
+
+          // Check if the move is in possible moves
+          const isPossible = possibleMoves.some(
+            (move) => move[0] === x && move[1] === y
+          );
+          if (isPossible) {
+            // Send the move to the server
+            socket.emit("makeMove", { from: [fromX, fromY], to: [x, y] });
+          }
+
+          clearSelection();
+        }
+      }
+
+      // Highlight possible moves (simplified)
+      function highlightPossibleMoves(x, y) {
+        possibleMoves = [];
+
+        // This is a simplified version - in a real game, you would calculate all valid moves
+        // For this example, we'll just highlight squares that are empty or contain opponent pieces
+        const piece = board[x][y];
+        if (!piece) return;
+
+        const pieceType = piece.toLowerCase();
+        const color = piece === piece.toUpperCase() ? "white" : "black";
+
+        // Very basic move highlighting (just for demonstration)
+        // In a real game, you would implement proper move generation for each piece type
+        const directions = [];
+
+        switch (pieceType) {
+          case "p": // Pawn
+            const direction = color === "white" ? -1 : 1;
+            // Forward move
+            if (
+              x + direction >= 0 &&
+              x + direction < 8 &&
+              !board[x + direction][y]
+            ) {
+              possibleMoves.push([x + direction, y]);
+              // Double move from starting position
+              if (
+                (color === "white" &&
+                  x === 6 &&
+                  !board[5][y] &&
+                  !board[4][y]) ||
+                (color === "black" && x === 1 && !board[2][y] && !board[3][y])
+              ) {
+                possibleMoves.push([x + 2 * direction, y]);
+              }
+            }
+            // Captures
+            for (let dy of [-1, 1]) {
+              const newY = y + dy;
+              if (
+                newY >= 0 &&
+                newY < 8 &&
+                x + direction >= 0 &&
+                x + direction < 8
+              ) {
+                const target = board[x + direction][newY];
+                if (
+                  target &&
+                  ((color === "white" && target === target.toLowerCase()) ||
+                    (color === "black" && target === target.toUpperCase()))
+                ) {
+                  possibleMoves.push([x + direction, newY]);
+                }
+              }
+            }
+            break;
+
+          case "r": // Rook
+            for (let dir of [
+              [1, 0],
+              [-1, 0],
+              [0, 1],
+              [0, -1],
+            ]) {
+              let nx = x + dir[0],
+                ny = y + dir[1];
+              while (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                if (!board[nx][ny]) {
+                  possibleMoves.push([nx, ny]);
+                } else {
+                  if (
+                    (color === "white" &&
+                      board[nx][ny] === board[nx][ny].toLowerCase()) ||
+                    (color === "black" &&
+                      board[nx][ny] === board[nx][ny].toUpperCase())
+                  ) {
+                    possibleMoves.push([nx, ny]);
+                  }
+                  break;
+                }
+                nx += dir[0];
+                ny += dir[1];
+              }
+            }
+            break;
+
+          case "n": // Knight
+            for (let dx of [-2, -1, 1, 2]) {
+              for (let dy of [-2, -1, 1, 2]) {
+                if (Math.abs(dx) + Math.abs(dy) === 3) {
+                  const nx = x + dx,
+                    ny = y + dy;
+                  if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                    if (
+                      !board[nx][ny] ||
+                      (color === "white" &&
+                        board[nx][ny] === board[nx][ny].toLowerCase()) ||
+                      (color === "black" &&
+                        board[nx][ny] === board[nx][ny].toUpperCase())
+                    ) {
+                      possibleMoves.push([nx, ny]);
+                    }
+                  }
+                }
+              }
+            }
+            break;
+
+          case "b": // Bishop
+            for (let dir of [
+              [1, 1],
+              [1, -1],
+              [-1, 1],
+              [-1, -1],
+            ]) {
+              let nx = x + dir[0],
+                ny = y + dir[1];
+              while (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                if (!board[nx][ny]) {
+                  possibleMoves.push([nx, ny]);
+                } else {
+                  if (
+                    (color === "white" &&
+                      board[nx][ny] === board[nx][ny].toLowerCase()) ||
+                    (color === "black" &&
+                      board[nx][ny] === board[nx][ny].toUpperCase())
+                  ) {
+                    possibleMoves.push([nx, ny]);
+                  }
+                  break;
+                }
+                nx += dir[0];
+                ny += dir[1];
+              }
+            }
+            break;
+
+          case "q": // Queen
+            for (let dir of [
+              [1, 0],
+              [-1, 0],
+              [0, 1],
+              [0, -1],
+              [1, 1],
+              [1, -1],
+              [-1, 1],
+              [-1, -1],
+            ]) {
+              let nx = x + dir[0],
+                ny = y + dir[1];
+              while (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                if (!board[nx][ny]) {
+                  possibleMoves.push([nx, ny]);
+                } else {
+                  if (
+                    (color === "white" &&
+                      board[nx][ny] === board[nx][ny].toLowerCase()) ||
+                    (color === "black" &&
+                      board[nx][ny] === board[nx][ny].toUpperCase())
+                  ) {
+                    possibleMoves.push([nx, ny]);
+                  }
+                  break;
+                }
+                nx += dir[0];
+                ny += dir[1];
+              }
+            }
+            break;
+
+          case "k": // King
+            for (let dx of [-1, 0, 1]) {
+              for (let dy of [-1, 0, 1]) {
+                if (dx === 0 && dy === 0) continue;
+                const nx = x + dx,
+                  ny = y + dy;
+                if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                  if (
+                    !board[nx][ny] ||
+                    (color === "white" &&
+                      board[nx][ny] === board[nx][ny].toLowerCase()) ||
+                    (color === "black" &&
+                      board[nx][ny] === board[nx][ny].toUpperCase())
+                  ) {
+                    possibleMoves.push([nx, ny]);
+                  }
+                }
+              }
+            }
+            break;
+        }
+
+        // Highlight possible moves on the board
+        possibleMoves.forEach(([mx, my]) => {
+          const square = document.getElementById(`square-${mx}-${my}`);
+          if (board[mx][my]) {
+            square.classList.add("possible-capture");
+          } else {
+            square.classList.add("possible-move");
+          }
+        });
+      }
+
+      // Clear selection and possible move highlights
+      function clearSelection() {
+        if (selectedSquare) {
+          const [x, y] = selectedSquare;
+          document
+            .getElementById(`square-${x}-${y}`)
+            .classList.remove("selected");
+          selectedSquare = null;
+        }
+
+        // Clear possible move highlights
+        document
+          .querySelectorAll(".possible-move, .possible-capture")
+          .forEach((el) => {
+            el.classList.remove("possible-move", "possible-capture");
+          });
+
+        possibleMoves = [];
+      }
+
+      // Update game status display
+      function updateStatus(turn, inCheck) {
+        const turnInfo = document.getElementById("turnInfo");
+        turnInfo.className = turn === "white" ? "white-turn" : "black-turn";
+
+        let status =
+          turn === playerColor ? "Your turn" : "Waiting for opponent...";
+        if (inCheck) {
+          status += " - You are in check!";
+        }
+
+        turnInfo.textContent = status;
+      }
+
+      // Add move to history display
+      function addMoveToHistory(from, to, piece) {
+        const historyEl = document.getElementById("historyEntries");
+        const moveEl = document.createElement("div");
+        moveEl.className = "move-entry";
+
+        const fromNotation = `${String.fromCharCode(97 + from[1])}${
+          8 - from[0]
+        }`;
+        const toNotation = `${String.fromCharCode(97 + to[1])}${8 - to[0]}`;
+
+        moveEl.textContent = `${piece.toUpperCase()} from ${fromNotation} to ${toNotation}`;
+        historyEl.appendChild(moveEl);
+        historyEl.scrollTop = historyEl.scrollHeight;
+      }
+
+      // Initialize game when matched with opponent
+      socket.on("gameStart", (data) => {
+        playerColor = data.color;
+        gameId = data.opponent;
+        board = data.board;
+        currentTurn = data.turn;
+
+        document.getElementById(
+          "status"
+        ).textContent = `Matched with opponent. You are playing as ${playerColor}.`;
+        document.getElementById("readyButton").style.display = "none";
+
+        initBoard();
+        updateStatus(currentTurn, false);
+      });
+
+      // Handle move made by opponent
+      socket.on("moveMade", (data) => {
+        board = data.board;
+        currentTurn = data.turn;
+
+        // Update the board display
+        initBoard();
+
+        // Update status
+        updateStatus(currentTurn, data.inCheck);
+
+        // Add to move history
+        addMoveToHistory(data.from, data.to, data.piece);
+
+        // Handle checkmate/stalemate
+        if (data.isCheckmate || data.isStalemate) {
+          let resultMessage;
+          if (data.isCheckmate) {
+            resultMessage = `Checkmate! ${
+              data.turn === "white" ? "Black" : "White"
+            } wins!`;
+          } else {
+            resultMessage = "Stalemate! Game is a draw.";
+          }
+
+          document.getElementById("gameOverText").textContent = resultMessage;
+          document.getElementById("gameOver").style.display = "flex";
+        }
+      });
+
+      // Handle invalid move attempt
+      socket.on("invalidMove", (message) => {
+        alert(message);
+        clearSelection();
+      });
+
+      // Handle game over
+      socket.on("gameOver", (message) => {
+        document.getElementById("gameOverText").textContent = message;
+        document.getElementById("gameOver").style.display = "flex";
+      });
+
+      // Handle opponent disconnect
+      socket.on("opponentDisconnected", (message) => {
+        document.getElementById("gameOverText").textContent = message;
+        document.getElementById("gameOver").style.display = "flex";
+      });
+
+      // Ready button click handler
+      document.getElementById("readyButton").addEventListener("click", () => {
+        socket.emit("readyToPlay");
+        document.getElementById("status").textContent =
+          "Searching for opponent...";
+      });
+
+      // Initialize the board when page loads
+      window.onload = initBoard;
+    </script>
+  </body>
+</html>

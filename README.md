@@ -1,2 +1,2 @@
-# ChessGame
-a simple chess game
+# bingoGame
+Let's play  BINGO 
