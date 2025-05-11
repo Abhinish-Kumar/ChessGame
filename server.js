@@ -2,9 +2,12 @@ const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
 const cors = require("cors");
+const path = require("path");
 
 const app = express();
 app.use(cors());
+// Serve static files from the 'public' directory
+app.use(express.static(path.join(__dirname, "public")));
 const server = http.createServer(app);
 
 const port = process.env.PORT || 3000;
@@ -22,7 +25,7 @@ let waitingPlayers = [];
 const activeGames = new Map(); // socket.id -> game data
 
 app.get("/", (req, res) => {
-  res.send("Chess Server is running");
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
 // Initial chess board setup
